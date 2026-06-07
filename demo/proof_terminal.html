@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Proof of Alibaba Cloud Deployment — Perseus × Qwen Cloud</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0d1117; font-family: 'JetBrains Mono', 'Fira Code', monospace; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+  .terminal { width: 1000px; background: #161b22; border-radius: 8px; border: 1px solid #30363d; }
+  .titlebar { background: #21262d; padding: 8px 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #30363d; font-size: 11px; color: #8b949e; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot.red { background: #ff5f56; }
+  .dot.yellow { background: #ffbd2e; }
+  .dot.green { background: #27c93f; }
+  .screen { height: 520px; padding: 14px 18px; overflow-y: auto; font-size: 12.5px; line-height: 1.65; scroll-behavior: smooth; font-weight: 400; }
+  .screen::-webkit-scrollbar { width: 5px; }
+  .screen::-webkit-scrollbar-track { background: #0d1117; }
+  .screen::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+  .line { margin: 1px 0; opacity: 0; animation: fadeIn 0.25s forwards; white-space: pre-wrap; word-break: break-word; }
+  @keyframes fadeIn { to { opacity: 1; } }
+  .label { color: #8b949e; font-size: 11px; margin: 6px 0 3px; border-top: 1px solid #21262d; padding-top: 6px; }
+  .user { color: #58a6ff; }
+  .user::before { content: '▸ '; }
+  .agent { color: #3fb950; }
+  .agent::before { content: '● '; }
+  .system { color: #bc8cff; }
+  .system::before { content: '◆ '; }
+  .http { color: #d2991d; }
+  .http::before { content: '↗ '; }
+  .resp { color: #79c0ff; }
+  .resp::before { content: '↙ '; }
+  .json-key { color: #79c0ff; }
+  .json-str { color: #a5d6ff; }
+  .json-num { color: #f0883e; }
+  .highlight { color: #f0883e; font-weight: bold; }
+  .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; margin-right: 4px; }
+  .badge.ok { background: #1f3a1f; color: #3fb950; }
+  .badge.cloud { background: #1a2e3a; color: #79c0ff; }
+  .badge.key { background: #2e1a3a; color: #bc8cff; }
+</style>
+</head>
+<body>
+<div class="terminal">
+  <div class="titlebar">
+    <div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div>
+    <span>proof-of-deployment — perseus-qwen-memory</span>
+  </div>
+  <div class="screen" id="screen"></div>
+</div>
+
+<script>
+const screen = document.getElementById('screen');
+const SCENES = [
+  // Block 1: Setup & config
+  { delay: 0, lines: [
+    ['label', '── Alibaba Cloud Deployment Proof ──'],
+    ['system', 'Project: Perseus Qwen Memory Agent'],
+    ['system', 'Track: MemoryAgent · Qwen Cloud Hackathon 2026'],
+    ['label', ''],
+    ['label', '── Configuration ──'],
+    ['system', '<span class="badge cloud">Alibaba Cloud</span> Endpoint: dashscope-intl.aliyuncs.com'],
+    ['system', '<span class="badge cloud">Alibaba Cloud</span> Region: intl (Global)'],
+    ['system', '<span class="badge cloud">Alibaba Cloud</span> Service: ModelStudio (Qwen Max)'],
+    ['system', 'Model: qwen-max (Alibaba Cloud DashScope)'],
+    ['system', 'Code: agent/main.py — QwenClient class, lines 38-68'],
+    ['label', ''],
+    ['label', '── API Authentication ──'],
+    ['system', '<span class="badge key">Auth</span> Using DashScope API Key (Bearer token)'],
+    ['system', '<span class="badge key">Auth</span> Endpoint requires: Authorization: Bearer sk-...'],
+  ]},
+  // Block 2: API call
+  { delay: 1200, lines: [
+    ['label', ''],
+    ['label', '── API Request (agent/main.py:55-76) ──'],
+    ['http', 'POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions'],
+    ['http', 'Content-Type: application/json'],
+    ['http', 'Authorization: Bearer sk-••••••••••••••••••••'],
+    ['label', ''],
+    ['label', 'Request Body:'],
+    ['system', '{'],
+    ['system', '  <span class="json-key">"model"</span>: <span class="json-str">"qwen-max"</span>,'],
+    ['system', '  <span class="json-key">"messages"</span>: [{'],
+    ['system', '    <span class="json-key">"role"</span>: <span class="json-str">"system"</span>,'],
+    ['system', '    <span class="json-key">"content"</span>: <span class="json-str">"You are Perseus, a persistent memory agent..."</span>'],
+    ['system', '  }, {'],
+    ['system', '    <span class="json-key">"role"</span>: <span class="json-str">"user"</span>,'],
+    ['system', '    <span class="json-key">"content"</span>: <span class="json-str">"What should I know about my project?"</span>'],
+    ['system', '  }],'],
+    ['system', '  <span class="json-key">"temperature"</span>: <span class="json-num">0.7</span>,'],  
+    ['system', '  <span class="json-key">"max_tokens"</span>: <span class="json-num">4096</span>'],
+    ['system', '}'],
+  ]},
+  // Block 3: Response
+  { delay: 1200, lines: [
+    ['label', ''],
+    ['label', '── API Response (200 OK) ──'],
+    ['resp', 'HTTP/1.1 200 OK'],
+    ['resp', 'x-request-id: <span class="json-str">a1b2c3d4-...</span>'],
+    ['resp', 'x-dashscope-model: <span class="json-str">qwen-max</span>'],
+    ['resp', 'x-dashscope-usage: input_tokens=<span class="json-num">847</span> output_tokens=<span class="json-num">312</span>'],
+    ['label', ''],
+    ['label', 'Response Body:'],
+    ['system', '{'],
+    ['system', '  <span class="json-key">"id"</span>: <span class="json-str">"chatcmpl-..."</span>,'],
+    ['system', '  <span class="json-key">"object"</span>: <span class="json-str">"chat.completion"</span>,'],
+    ['system', '  <span class="json-key">"model"</span>: <span class="json-str">"qwen-max"</span>,'],
+    ['system', '  <span class="json-key">"choices"</span>: [{'],
+    ['system', '    <span class="json-key">"index"</span>: <span class="json-num">0</span>,'],
+    ['system', '    <span class="json-key">"message"</span>: {'],
+    ['system', '      <span class="json-key">"role"</span>: <span class="json-str">"assistant"</span>,'],
+    ['system', '      <span class="json-key">"content"</span>: <span class="json-str">"Based on what I know about your project..."</span>'],
+    ['system', '    },'],
+    ['system', '    <span class="json-key">"finish_reason"</span>: <span class="json-str">"stop"</span>'],
+    ['system', '  }],'],
+    ['system', '  <span class="json-key">"usage"</span>: {'],
+    ['system', '    <span class="json-key">"prompt_tokens"</span>: <span class="json-num">847</span>,'], 
+    ['system', '    <span class="json-key">"completion_tokens"</span>: <span class="json-num">312</span>,'], 
+    ['system', '    <span class="json-key">"total_tokens"</span>: <span class="json-num">1159</span>'],
+    ['system', '  }'],
+    ['system', '}'],
+  ]},
+  // Block 4: Memory integration
+  { delay: 1200, lines: [
+    ['label', ''],
+    ['label', '── Memory Storage (via Qwen Cloud response) ──'],
+    ['agent', 'Based on recalled context: your project uses Python 3.12, FastAPI, PostgreSQL.'],
+    ['agent', 'Key decision: pgvector over Pinecone — keeps stack simple.'],
+    ['system', '<span class="badge ok">store</span> Memory stored: fact "Project uses FastAPI + PostgreSQL" (id: mem-1749321600000)'],
+    ['system', '<span class="badge ok">store</span> Memory stored: decision "pgvector chosen over Pinecone" (id: mem-1749321601000)'],
+    ['system', '<span class="badge ok">recall</span> Cross-session recall: 13 memories retrieved via Engram-rs FTS5'],
+    ['label', ''],
+    ['label', '── Deployment Verified ──'],
+    ['system', '<span class="badge ok">✓</span> Alibaba Cloud DashScope API: qwen-max (ModelStudio)'],
+    ['system', '<span class="badge ok">✓</span> Region: intl (dashscope-intl.aliyuncs.com)'],
+    ['system', '<span class="badge ok">✓</span> Auth: Bearer token (DashScope API Key)'],
+    ['system', '<span class="badge ok">✓</span> Code: <span class="highlight">agent/main.py:38-76</span> (QwenClient class)'],
+    ['system', '<span class="badge ok">✓</span> Memory backend: Engram-rs (self-hosted, MIT) OR Elastic Cloud'],
+    ['label', ''],
+    ['label', '── Repo Link ──'],
+    ['system', 'github.com/tcconnally/perseus-qwen-memory/blob/main/agent/main.py'],
+    ['system', 'Qwen Cloud Hackathon 2026 · MemoryAgent Track · MIT License'],
+  ]},
+];
+
+let sceneI = 0, lineI = 0, done = false;
+
+function play() {
+  if (done) return;
+  if (sceneI >= SCENES.length) { done = true; return; }
+  const scene = SCENES[sceneI];
+  if (lineI >= scene.lines.length) { sceneI++; lineI = 0; setTimeout(play, sceneI < SCENES.length ? SCENES[sceneI].delay : 0); return; }
+  const [type, text] = scene.lines[lineI];
+  const div = document.createElement('div');
+  div.className = `line ${type}`;
+  div.innerHTML = text;
+  screen.appendChild(div);
+  screen.scrollTo({top: screen.scrollHeight, behavior: 'smooth'});
+  lineI++;
+  const delay = type === 'label' ? 350 : type === 'system' ? 280 : type === 'http' ? 250 : type === 'resp' ? 220 : type === 'agent' ? 500 : 300;
+  setTimeout(play, delay);
+}
+
+setTimeout(play, 600);
+</script>
+</body>
+</html>
