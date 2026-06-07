@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Perseus Qwen Memory Agent — Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0d1117;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 40px;
+  }
+  .terminal {
+    width: 1100px;
+    max-width: 100%;
+    background: #161b22;
+    border-radius: 8px;
+    border: 1px solid #30363d;
+    overflow: hidden;
+    box-shadow: 0 0 40px rgba(88, 166, 255, 0.1);
+  }
+  .titlebar {
+    background: #21262d;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #30363d;
+  }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.red { background: #ff5f56; }
+  .dot.yellow { background: #ffbd2e; }
+  .dot.green { background: #27c93f; }
+  .titlebar-text {
+    color: #8b949e;
+    font-size: 12px;
+    margin-left: 12px;
+  }
+  .screen {
+    height: 380px;
+    padding: 16px 20px;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    scroll-behavior: smooth;
+  }
+  .screen::-webkit-scrollbar { width: 6px; }
+  .screen::-webkit-scrollbar-track { background: #0d1117; }
+  .screen::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+
+  .line { margin: 2px 0; opacity: 0; animation: fadeIn 0.3s forwards; white-space: pre-wrap; word-break: break-word; }
+  @keyframes fadeIn { to { opacity: 1; } }
+
+  .label { color: #8b949e; font-size: 11px; margin: 8px 0 4px; border-top: 1px solid #21262d; padding-top: 8px; }
+  .user { color: #58a6ff; }
+  .user::before { content: '▸ '; }
+  .agent { color: #3fb950; }
+  .agent::before { content: '● '; }
+  .system { color: #bc8cff; }
+  .system::before { content: '◆ '; }
+  .memory { color: #d2991d; }
+  .memory::before { content: '◈ '; }
+
+  .badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  .badge.store { background: #1f3a1f; color: #3fb950; }
+  .badge.recall { background: #1a2e3a; color: #58a6ff; }
+  .badge.insight { background: #2e1a3a; color: #bc8cff; }
+  .badge.decay { background: #3a2a1a; color: #d2991d; }
+  .badge.swap { background: #1a3a3a; color: #79c0ff; }
+
+  .highlight { color: #f0883e; font-weight: bold; }
+
+  @keyframes cursor-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+  .cursor { animation: cursor-blink 0.8s infinite; }
+</style>
+</head>
+<body>
+<div class="terminal">
+  <div class="titlebar">
+    <div class="dot red"></div>
+    <div class="dot yellow"></div>
+    <div class="dot green"></div>
+    <span class="titlebar-text">perseus-qwen-memory — demo</span>
+  </div>
+  <div class="screen" id="screen"></div>
+</div>
+
+<script>
+const screen = document.getElementById('screen');
+const SCENES = [
+  // Scene 1: Session 1 — Project Introduction
+  { delay: 0, lines: [
+    ['label', '── Session 1: Project Onboarding ──'],
+    ['system', 'Starting session... Memory health: OK (Engram-rs, 0 existing memories)'],
+    ['user', 'I\'m building a microservices platform. Stack: Python, FastAPI, PostgreSQL, Redis, Docker + K8s.'],
+    ['agent', 'Got it. Let me store your project context so I remember it across sessions.'],
+    ['system', '<span class="badge store">store</span> Project stack: Python 3.12, FastAPI, PostgreSQL, Redis, Docker, K8s'],
+    ['system', '<span class="badge store">store</span> Convention: async/await for all I/O'],
+    ['system', '<span class="badge store">store</span> Convention: type hints on all public functions'],
+    ['system', '<span class="badge store">store</span> Convention: pytest for testing, Black for formatting'],
+    ['system', '<span class="badge store">store</span> Architecture: Microservices + API gateway + RabbitMQ'],
+    ['user', 'What conventions should I follow when I start coding?'],
+    ['agent', 'Based on what I know about your project:'],
+    ['agent', '• Use <span class="highlight">async/await</span> for all I/O operations'],
+    ['agent', '• <span class="highlight">Type hints</span> on all public functions'],
+    ['agent', '• <span class="highlight">pytest</span> with pytest-cov for testing'],
+    ['agent', '• <span class="highlight">Black</span> for formatting, 100 char line length'],
+    ['system', 'Session 1 complete. 8 memories stored. 0 insights compounded.'],
+  ]},
+  // Scene 2: Session 2 — Recall + Decision
+  { delay: 2000, lines: [
+    ['label', ''],
+    ['label', '── Session 2: Next Day — Agent Recalls Context ──'],
+    ['system', 'Starting session... <span class="badge recall">recall</span> Loading 8 existing memories...'],
+    ['memory', 'Recalled: [preference] pytest for testing, Black formatting (1d ago)'],
+    ['memory', 'Recalled: [fact] Stack: Python, FastAPI, PostgreSQL, Redis, K8s (1d ago)'],
+    ['memory', 'Recalled: [fact] Architecture: Microservices + API gateway (1d ago)'],
+    ['user', 'We need semantic search. Should I use Pinecone or pgvector?'],
+    ['agent', 'Since you already have <span class="highlight">PostgreSQL</span> in your stack, pgvector avoids additional operational complexity and vendor lock-in. Let me log this decision so we remember the rationale.'],
+    ['system', '<span class="badge store">store</span> Decision: pgvector over Pinecone — rationale: PostgreSQL already in stack, avoids vendor lock-in'],
+    ['user', 'What endpoint structure should I use for the search API?'],
+    ['agent', 'Given your <span class="highlight">FastAPI</span> + <span class="highlight">async/await</span> conventions and the <span class="highlight">pgvector</span> decision, structure it as:'],
+    ['agent', '• <span class="highlight">POST /search</span> — semantic search with filters'],
+    ['agent', '• <span class="highlight">GET /search/index</span> — index health check'],
+    ['agent', '• Use <span class="highlight">asyncpg</span> for the pgvector connection pool'],
+    ['system', 'Session 2 complete. 3 new memories. Confidence on earlier memories reinforced.'],
+  ]},
+  // Scene 3: Session 3 — Compounding
+  { delay: 2000, lines: [
+    ['label', ''],
+    ['label', '── Session 3: One Week Later — Knowledge Compounds ──'],
+    ['system', 'Starting session... <span class="badge recall">recall</span> 11 memories across 3 categories...'],
+    ['memory', 'Recalled: [fact] Stack (7d ago), [decision] pgvector choice (6d ago), [preference] coding conventions (7d ago)'],
+    ['user', 'Onboard a new developer. What should they know about this project?'],
+    ['agent', 'Here\'s everything I\'ve learned across our 3 sessions:'],
+    ['agent', ''],
+    ['agent', '<span class="highlight">Stack:</span> Python 3.12, FastAPI, PostgreSQL + pgvector, Redis, Docker, Kubernetes'],
+    ['agent', '<span class="highlight">Architecture:</span> Microservices with API gateway, event-driven via RabbitMQ'],
+    ['agent', '<span class="highlight">Conventions:</span> async/await, type hints, pytest, Black (100 chars)'],
+    ['agent', '<span class="highlight">Key Decision:</span> pgvector over Pinecone — keeps stack simple, avoids vendor lock-in'],
+    ['agent', ''],
+    ['agent', 'I\'ve compounded this knowledge across sessions. Every time we talk, I get smarter about your codebase.'],
+    ['system', '<span class="badge insight">insight</span> Compound: Python+PostgreSQL stack is consistent — no conflicting tech choices across 3 sessions'],
+    ['system', '<span class="badge insight">insight</span> Compound: All API decisions favor simplicity (pgvector, REST, async) over complexity'],
+    ['system', 'Session 3 complete. 2 insights compounded. Agent is now smarter than Session 1.'],
+  ]},
+  // Scene 4: Backend Swap
+  { delay: 2000, lines: [
+    ['label', ''],
+    ['label', '── Backend Swap: Elastic Cloud → Engram-rs (Self-Hosted) ──'],
+    ['system', '<span class="badge swap">swap</span> Switching MEMORY_BACKEND=elastic → MEMORY_BACKEND=engram'],
+    ['system', 'Same agent code, same MemoryBackend interface. One config change.'],
+    ['system', '<span class="badge recall">recall</span> Engram-rs (FTS5 search, SQLite-backed, MIT licensed)'],
+    ['memory', 'Recalled: 13 memories across Engram-rs — identical results, zero cloud dependency'],
+    ['agent', 'The same 13 memories, the same recall quality — but running entirely on your own hardware. <span class="highlight">MIT licensed, no API keys, no cloud.</span>'],
+  ]},
+  // Scene 5: Closing
+  { delay: 2000, lines: [
+    ['label', ''],
+    ['label', '── Perseus Qwen Memory Agent — Summary ──'],
+    ['agent', '✓ <span class="highlight">Persistent memory</span> across sessions — agent never forgets'],
+    ['agent', '✓ <span class="highlight">Cross-session compounding</span> — gets smarter over time'],
+    ['agent', '✓ <span class="highlight">Confidence decay</span> — old unverified facts fade ("timely forgetting")'],
+    ['agent', '✓ <span class="highlight">Swappable backends</span> — Elastic (cloud) or Engram-rs (self-hosted, MIT)'],
+    ['agent', '✓ <span class="highlight">Qwen Cloud</span> powered — qwen-max via DashScope API'],
+    ['agent', ''],
+    ['agent', '<span class="highlight">github.com/tcconnally/perseus-qwen-memory</span>  ·  MIT License'],
+    ['agent', 'Qwen Cloud Hackathon 2026 · MemoryAgent Track'],
+  ]},
+];
+
+let sceneIndex = 0;
+let lineIndex = 0;
+let allDone = false;
+
+function addLine(type, text) {
+  const div = document.createElement('div');
+  div.className = `line ${type}`;
+  div.innerHTML = text + (type === 'user' ? '<span class="cursor">▌</span>' : '');
+  screen.appendChild(div);
+  screen.scrollTo({top: screen.scrollHeight, behavior: 'smooth'});
+}
+
+function playNextLine() {
+  if (allDone) return;
+
+  if (sceneIndex >= SCENES.length) {
+    allDone = true;
+    return;
+  }
+
+  const scene = SCENES[sceneIndex];
+
+  if (lineIndex >= scene.lines.length) {
+    sceneIndex++;
+    lineIndex = 0;
+    if (sceneIndex < SCENES.length) {
+      setTimeout(playNextLine, SCENES[sceneIndex].delay);
+    } else {
+      allDone = true;
+    }
+    return;
+  }
+
+  const [type, text] = scene.lines[lineIndex];
+  addLine(type, text);
+  lineIndex++;
+
+  // Vary timing: labels faster, agent responses slower
+  let nextDelay = type === 'label' ? 400 :
+                  type === 'system' ? 350 :
+                  type === 'memory' ? 300 :
+                  type === 'agent' ? 600 :
+                  type === 'user' ? 500 : 400;
+
+  setTimeout(playNextLine, nextDelay);
+}
+
+// Start the demo
+setTimeout(playNextLine, 800);
+</script>
+</body>
+</html>
