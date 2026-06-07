@@ -1,0 +1,20 @@
+Description:
+Perseus gives AI agents persistent, compounding memory so they never forget your project context. Watch as the agent gets smarter across 3 sessions — remembering stack, conventions, decisions, and compounding insights over time.
+
+🔹 Session 1: Agent learns project stack, conventions, architecture
+🔹 Session 2: Agent recalls prior knowledge, logs decisions with rationale
+🔹 Session 3: Agent compounds everything — onboard a new dev from memory
+
+Built for the Qwen Cloud Hackathon 2026 — MemoryAgent Track.
+LLM: Qwen Max via DashScope API
+Memory: Elastic Cloud OR Engram-rs (self-hosted, MIT) — swap in one config line
+
+🔗 GitHub: https://github.com/tcconnally/perseus-qwen-memory
+🔗 Devpost: https://devpost.com/software/perseus-qwen-memory
+🔗 Hackathon: https://qwencloud-hackathon.devpost.com/
+
+Track: MemoryAgent — persistent memory, cross-session compounding, timely forgetting
+License: MIT
+
+Tags:
+QwenCloud, MemoryAgent, AI, agent, memory, persistent-memory, AI-agent, LLM, Qwen, DashScope, AlibabaCloud, Python, MCP, agent-memory, context-engine, developer-tools, coding, devtools, hackathon, opensource, MIT, Engram, Elastic, QwenCloudHackathon, agentic-AI, machine-learning
