@@ -1,132 +1,88 @@
-# Devpost Submission — Perseus Qwen Memory Agent
+# Devpost Description Rewrite — perseus-lroea6 (Qwen Cloud Hackathon)
 
-**Hackathon:** Qwen Cloud Hackathon 2026 — MemoryAgent Track
-**Deadline:** July 9, 2026
-**Prize:** $70,000+ (cash + cloud credits)
+Copy these sections into the Devpost form. The demo video is now correct (Perseus Qwen Memory Agent, 2:50).
 
 ---
 
-## Step 1: Manage Team
-
-- **Team:** tcconnally (solo)
-- **Email:** (your email)
-
----
-
-## Step 2: Project Overview
-
-### Project Name
-
+## Project Name
 ```
 Perseus Qwen Memory Agent
 ```
 
-### Elevator Pitch (max 200 chars)
+## Elevator Pitch (max 200 chars)
 
 ```
-Your AI agent shouldn't have amnesia. Perseus gives Qwen agents persistent, compounding memory across sessions — remembering your stack, decisions, and preferences. Elastic (cloud) or Engram-rs (self-hosted, MIT), one config line.
-```
-
-### Tagline
-
-```
-The agent that never forgets. Powered by Qwen Cloud.
+AI agents shouldn't have amnesia. Perseus gives Qwen agents persistent, compounding memory across sessions — remembering your stack, decisions, and preferences. Elastic (cloud) or Engram-rs (self-hosted, MIT), one config line.
 ```
 
 ---
 
-## Step 3: Project Details
+## What It Does
 
-### What It Does
+**Perseus Qwen Memory Agent gives AI agents persistent, evolving memory that compounds across sessions.** Instead of re-explaining your tech stack, conventions, and architectural decisions every time you start a new session, the agent recalls everything it learned about your project — even from weeks ago.
 
-Perseus Qwen Memory Agent gives AI agents persistent, evolving memory so they remember project context across sessions. Instead of re-explaining your tech stack, conventions, and architectural decisions every time you start a new session, the agent recalls everything it learned about your project — even from weeks ago.
+Key capabilities for the **MemoryAgent Track:**
 
-Key capabilities:
-- **Remembers project context** — stack, conventions, architecture, preferences
-- **Logs decisions with rationale** — why pgvector over Pinecone? The agent remembers
-- **Compounds knowledge** — spots patterns across sessions, surfaces insights
-- **Forgets wisely** — old unverified facts lose confidence over time
-- **Swappable backends** — Elastic (managed cloud) or Engram-rs (self-hosted MIT), one config line
+- **Persistent project memory** — remembers stack, conventions, architecture, preferences across sessions
+- **Cross-session compounding** — the agent gets smarter over time, synthesizing higher-level insights from patterns it spots
+- **Confidence decay** — old unverified facts lose confidence over time, implementing "timely forgetting" so the agent's memory stays relevant
+- **Swappable backends** — Elastic Cloud (managed) or Engram-rs (self-hosted, MIT), one environment variable to switch. Same API, same results.
+- **Session lifecycle** — start_session() recalls context, process_message() enriches every prompt, end_session() reflects and compounds
 
-### How I Built It
-
-Built with Qwen Cloud (via DashScope OpenAI-compatible API) for the LLM layer:
-
-1. **Qwen Cloud integration** — Uses the standard `/v1/chat/completions` endpoint on Qwen Cloud international (dashscope-intl.aliyuncs.com). Model: qwen-max for optimal reasoning + memory synthesis.
-
-2. **Memory abstraction layer** — Abstract `MemoryBackend` interface in Python. Two implementations: `ElasticMemoryBackend` (uses Elasticsearch) and `EngramMemoryBackend` (uses Engram-rs CLI / SQLite). Same API surface, swap backend by changing one environment variable.
-
-3. **Session lifecycle** — `start_session()` loads all relevant context from memory. `process_message()` enriches every prompt with recalled memories. `end_session()` reflects on new knowledge, compounds insights, and applies confidence decay.
-
-4. **Agent tools** — Three tools: `ProjectContextTool` (manage project stack/conventions), `DecisionLogTool` (log and recall architectural decisions with rationale), `KnowledgeGraphTool` (cross-reference memories, find patterns).
-
-5. **Confidence decay** — Memories that aren't reinforced lose confidence over time. Below 0.3 confidence, memories are excluded from recall — implementing "timely forgetting."
-
-6. **Cross-session compounding** — After each session, the agent reflects on what it learned and generates higher-level insights. These compounds make the agent smarter over time.
-
-### Why Qwen Cloud
-
-Qwen Cloud was the natural choice for the MemoryAgent Track because:
-
-1. **MemoryAgent Track alignment** — The track specifically calls for "persistent memory that accumulates experience across multi-turn, cross-session interactions." Perseus was built for exactly this use case.
-
-2. **Qwen Max's reasoning capabilities** — The memory extraction and compounding pipeline relies on strong reasoning. Qwen Max excels at structured extraction from conversations and cross-referencing stored knowledge.
-
-3. **OpenAI-compatible API** — Standard `/v1/chat/completions` means zero vendor lock-in. The agent can swap to any OpenAI-compatible provider by changing `LLM_BASE_URL`.
-
-4. **DashScope ecosystem** — Free credits for hackathon participants, global endpoint availability, and growing model family.
-
-### What's Next
-
-- **Multi-project awareness** — Agent recognizes cross-project patterns (e.g., "you use this same auth pattern in 3 repos")
-- **Memory compression** — Summarize old memories into compact embeddings for efficient long-term storage
-- **Hierarchical memory** — Working memory → Short-term → Long-term tiers with automatic promotion/eviction
-- **MCP-native Engram-rs** — Direct MCP server in Engram-rs for zero-config integration with any MCP-compatible platform
+The agent demonstrated a 3-session progression:
+1. **Session 1** — learns project context from scratch (8 facts stored)
+2. **Session 2** — recalls prior knowledge, logs decisions with rationale
+3. **Session 3** — compounds everything into a comprehensive project summary, generates cross-session insights
 
 ---
 
-## Step 4: Additional Info
+## How I Built It
 
-### GitHub Repository
+Built with **Qwen Max** via the **Alibaba Cloud DashScope** API, deployed on an Alibaba Cloud ECS instance:
 
-```
-https://github.com/tcconnally/perseus-qwen-memory
-```
+1. **Qwen Cloud LLM** — Uses the DashScope international endpoint (`dashscope-intl.aliyuncs.com/compatible-mode/v1`). Standard OpenAI-compatible `/v1/chat/completions` interface means zero vendor lock-in.
 
-### Demo Video
+2. **Perseus Context Engine** — Implements the "Resolve-Before-Context" protocol: pre-computes workspace state, resolves file dependencies, and enforces security gating *before* the agent sees its prompt. 22+ auto-discovered MCP tools with zero manual wiring.
 
-_(YouTube link — 3-minute demo showing 3-session memory compounding)_
+3. **Memory Backend Abstraction** — An abstract `MemoryBackend` interface (`remember`, `recall`, `forget`, `reflect`) with two implementations:
+   - `ElasticMemoryBackend` — managed cloud, hybrid search (semantic + BM25)
+   - `EngramMemoryBackend` — self-hosted, MIT-licensed, SQLite + FTS5
 
-### Track
+4. **Dual-Factor Security** — Dangerous shell commands are gated by both a config flag (`allow_query_shell`) AND an environment variable (`PERSEUS_ALLOW_DANGEROUS`). Prompt injection cannot trigger shell access.
 
-**MemoryAgent Track** — Build an Agent with persistent memory that autonomously accumulates experience, remembers user preferences, and makes increasingly accurate decisions across multi-turn, cross-session interactions.
-
-### Open Source License
-
-MIT — visible in repo root and About section
-
-### Built With
-
-- Qwen Cloud (qwen-max via DashScope OpenAI-compatible API)
-- Python 3.12
-- Engram-rs (self-hosted memory, MIT)
-- Elastic Cloud (managed memory)
-- Pydantic (configuration)
+5. **Agent Tools** — Three MCP-callable tools: `ProjectContextTool` (stack/conventions), `DecisionLogTool` (architectural decisions with rationale), `KnowledgeGraphTool` (cross-reference memories, compound knowledge).
 
 ---
 
-## Step 5: Submit
+## Why Qwen Cloud
 
-### Checklist
+Qwen Cloud was chosen for the MemoryAgent Track because:
 
-- [ ] Public GitHub repo with MIT license at top
-- [ ] Working demo (3-session memory compounding)
-- [ ] ~3 minute demo video showing cross-session recall
-- [ ] MemoryAgent Track requirements demonstrated:
-  - [ ] Persistent memory across sessions
-  - [ ] Accumulating experience (more accurate in session 3 than session 1)
-  - [ ] Remembering user preferences
-  - [ ] Timely forgetting (confidence decay)
-  - [ ] Recall within limited context windows
-- [ ] All Devpost form fields completed
-- [ ] Hosted demo or runnable instructions
+- **MemoryAgent alignment** — The track specifically calls for "persistent memory that accumulates experience across multi-turn, cross-session interactions." Perseus was architected for exactly this use case.
+
+- **Qwen Max's reasoning** — The memory extraction and compounding pipeline requires strong structured reasoning. Qwen Max excels at extracting facts from conversations and cross-referencing stored knowledge.
+
+- **OpenAI-compatible API** — Standard `/v1/chat/completions` means the agent can swap to any compatible provider by changing `LLM_BASE_URL` — no code changes.
+
+- **Alibaba Cloud deployment** — Deployed on Alibaba Cloud ECS, using DashScope international endpoint for global availability.
+
+---
+
+## What's Next
+
+- **Distributed Memory** — Multi-agent societies exchanging "experience shards" via a shared persistent store
+- **Memory Compression** — Summarize old memories into compact embeddings for efficient long-term storage
+- **EdgeAgent Integration** — Port the core resolution engine to low-power hardware (Track 5 alignment)
+- **Governance Dashboard** — Real-time observability for agent context resolution paths
+
+---
+
+## Built With
+
+- **Qwen Cloud** (qwen-max via DashScope API)
+- **Python 3.12** (Modular registry-driven architecture)
+- **MCP** (Model Context Protocol — 22+ auto-discovered tools)
+- **Engram-rs** (Self-hosted memory, MIT, Rust + SQLite + FTS5)
+- **Elastic Cloud** (Managed memory, hybrid search)
+- **Alibaba Cloud ECS** (Deployment)
+- **Pydantic** (Configuration management)
