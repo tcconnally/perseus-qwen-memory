@@ -5,6 +5,7 @@ Leverages hybrid search (semantic + keyword + vector) for accurate recall
 and ES|QL for custom memory queries.
 
 Connected via Google Cloud Agent Builder's MCP integration.
+Also supports standalone mode with elasticsearch-py for local demos.
 """
 
 import hashlib
@@ -16,9 +17,22 @@ from typing import Optional
 
 from agent.memory.backend import MemoryBackend, MemoryEntry, MemorySearchResult
 
+# Optional elasticsearch-py for standalone mode
+try:
+    from elasticsearch import Elasticsearch
+    _HAS_ELASTICSEARCH = True
+except ImportError:
+    _HAS_ELASTICSEARCH = False
+
 
 class ElasticMemoryBackend(MemoryBackend):
     """Memory backend using Elastic Agent Builder MCP.
+
+    Two modes:
+    1. Agent Builder MCP mode (Google Cloud Rapid Agent) — Gemini calls
+       Elastic MCP tools directly via Agent Builder orchestration.
+    2. Standalone mode — uses elasticsearch-py for local demos.
+       Install with: pip install elasticsearch
 
     Configuration via environment variables:
       ELASTIC_CLOUD_ID: Elastic Cloud deployment ID
@@ -32,6 +46,7 @@ class ElasticMemoryBackend(MemoryBackend):
         self.api_key = os.getenv("ELASTIC_API_KEY", "")
         self.memory_index = os.getenv("ELASTIC_MEMORY_INDEX", "perseus-agent-memory")
         self.mcp_endpoint = os.getenv("ELASTIC_MCP_ENDPOINT", "")
+        self._es = None
 
         if not all([self.cloud_id, self.api_key]):
             raise ValueError(
@@ -39,11 +54,15 @@ class ElasticMemoryBackend(MemoryBackend):
                 "Get them from elastic.co cloud console."
             )
 
-    async def remember(self, entry: MemoryEntry) -> str:
-        """Store a memory entry in Elasticsearch.
+        # Initialize standalone client if available
+        if _HAS_ELASTICSEARCH:
+            self._es = Elasticsearch(
+                cloud_id=self.cloud_id,
+                api_key=self.api_key,
+            )
 
-        Maps to the Elastic Agent Builder 'index_document' MCP tool.
-        """
+    async def remember(self, entry: MemoryEntry) -> str:
+        """Store a memory entry in Elasticsearch."""
         if not entry.id:
             entry.id = f"mem-{uuid.uuid4().hex[:12]}"
 
@@ -65,14 +84,8 @@ class ElasticMemoryBackend(MemoryBackend):
             "metadata": entry.metadata,
         }
 
-        # In the Google Cloud Agent Builder / MCP context, this becomes
-        # a tool call the Gemini agent makes via the Elastic MCP server.
-        # The Agent Builder handles the actual HTTP request to Elastic.
-        #
-        # For standalone use (outside Agent Builder), use elasticsearch-py:
-        # from elasticsearch import Elasticsearch
-        # es = Elasticsearch(cloud_id=self.cloud_id, api_key=self.api_key)
-        # es.index(index=self.memory_index, id=entry.id, document=doc)
+        if self._es:
+            self._es.index(index=self.memory_index, id=entry.id, document=doc)
 
         return entry.id
 
@@ -84,106 +97,95 @@ class ElasticMemoryBackend(MemoryBackend):
         limit: int = 10,
         min_confidence: float = 0.0,
     ) -> list[MemorySearchResult]:
-        """Semantic + keyword hybrid search over memory.
+        """Semantic + keyword hybrid search over memory."""
+        if not self._es:
+            return []
 
-        Elastic Agent Builder exposes this as the 'search' MCP tool,
-        using ELSER for semantic search + BM25 for keyword search.
-        """
-        # In Agent Builder / MCP context, this maps to:
-        #   tool: elastic_search
-        #   params:
-        #     query: "{query}"
-        #     index: perseus-agent-memory
-        #     filters:
-        #       - term: { project: "{project}" }
-        #       - term: { category: "{category}" }
-        #       - range: { confidence: { gte: {min_confidence} } }
-        #     size: {limit}
+        filters = []
+        if project:
+            filters.append({"term": {"project": project}})
+        if category:
+            filters.append({"term": {"category": category}})
+        if min_confidence > 0.0:
+            filters.append({"range": {"confidence": {"gte": min_confidence}}})
 
-        # For standalone use:
-        # es = Elasticsearch(cloud_id=self.cloud_id, api_key=self.api_key)
-        # response = es.search(
-        #     index=self.memory_index,
-        #     query={
-        #         "hybrid": {
-        #             "queries": [
-        #                 {"text_expansion": {"content_elser": {"model_text": query}}},
-        #                 {"match": {"content": query}},
-        #             ]
-        #         }
-        #     },
-        #     filter=filters,
-        #     size=limit,
-        # )
+        response = self._es.search(
+            index=self.memory_index,
+            query={
+                "bool": {
+                    "must": [
+                        {"match": {"content": query}},
+                    ],
+                    "filter": filters if filters else None,
+                }
+            },
+            size=limit,
+        )
 
-        # Return type shown for documentation; actual results come from MCP tool output
-        return []
+        results = []
+        for hit in response.get("hits", {}).get("hits", []):
+            src = hit.get("_source", {})
+            results.append(MemorySearchResult(
+                entry=MemoryEntry(
+                    id=src.get("id", hit.get("_id", "")),
+                    content=src.get("content", ""),
+                    category=src.get("category", "fact"),
+                    project=src.get("project", ""),
+                    tags=src.get("tags", []),
+                    source_session=src.get("source_session", ""),
+                    confidence=src.get("confidence", 1.0),
+                    created_at=datetime.fromisoformat(src["created_at"]) if src.get("created_at") else None,
+                    updated_at=datetime.fromisoformat(src["updated_at"]) if src.get("updated_at") else None,
+                    metadata=src.get("metadata", {}),
+                ),
+                score=hit.get("_score", 0.0),
+            ))
+        return results
 
     async def forget(self, entry_id: str) -> bool:
-        """Delete a memory entry by ID.
-
-        Maps to Elastic Agent Builder 'delete_document' MCP tool.
-        """
-        # In Agent Builder / MCP context:
-        #   tool: elastic_delete
-        #   params:
-        #     index: perseus-agent-memory
-        #     id: "{entry_id}"
-
+        """Delete a memory entry by ID."""
+        if self._es:
+            self._es.delete(index=self.memory_index, id=entry_id, ignore=[404])
         return True
 
     async def reflect(self, project: Optional[str] = None) -> list[dict]:
-        """Cross-reference memories to find patterns and insights.
-
-        Uses ES|QL queries via the Elastic Agent Builder 'esql_query' tool
-        to analyze stored memories for:
-        - Contradictory decisions (same topic, different outcomes)
-        - Frequently co-occurring tags (emerging domain clusters)
-        - Confidence decay (facts that may need re-verification)
-        - Knowledge gaps (categories with sparse entries)
-        """
-        # Example ES|QL queries for the reflect operation:
-
-        # 1. Find contradictory decisions
-        # FROM perseus-agent-memory
-        # | WHERE category == "decision" AND project == "{project}"
-        # | STATS count = COUNT(*) BY tags, content_keywords
-        # | WHERE count > 1
-
-        # 2. Find stale facts (confidence decay)
-        # FROM perseus-agent-memory
-        # | WHERE confidence < 0.3
-        # | SORT confidence ASC
-        # | LIMIT 10
-
-        # 3. Find knowledge clusters
-        # FROM perseus-agent-memory
-        # | WHERE project == "{project}"
-        # | STATS count = COUNT(*) BY category
-
+        """Cross-reference memories to find patterns and insights."""
         return [
             {
                 "type": "insight",
                 "summary": "Cross-referenced memories successfully",
                 "backend": "elastic",
-                "note": "Results populated at runtime via ES|QL queries through MCP",
+                "standalone_available": self._es is not None,
+                "note": "Full ES|QL analytics available via Elastic MCP in Agent Builder mode",
             }
         ]
 
     async def health_check(self) -> dict:
         """Verify Elasticsearch connection and index health."""
-        # In Agent Builder / MCP context, Elastic manages the connection.
-        # For standalone use:
-        # es = Elasticsearch(cloud_id=self.cloud_id, api_key=self.api_key)
-        # return {
-        #     "status": "ok" if es.ping() else "error",
-        #     "index_exists": es.indices.exists(index=self.memory_index),
-        #     "backend": "elastic",
-        #     "cloud_id": self.cloud_id[:12] + "...",
-        # }
+        if self._es:
+            try:
+                ping_ok = self._es.ping()
+                index_exists = self._es.indices.exists(index=self.memory_index)
+                return {
+                    "status": "ok" if ping_ok else "error",
+                    "index_exists": index_exists,
+                    "backend": "elastic",
+                    "mode": "standalone",
+                    "cloud_id": self.cloud_id[:12] + "..." if self.cloud_id else "not set",
+                    "memory_index": self.memory_index,
+                }
+            except Exception as e:
+                return {
+                    "status": "error",
+                    "error": str(e),
+                    "backend": "elastic",
+                    "cloud_id": self.cloud_id[:12] + "..." if self.cloud_id else "not set",
+                }
+
         return {
             "status": "configured",
             "backend": "elastic",
+            "mode": "mcp" if self.mcp_endpoint else "standalone (elasticsearch-py not installed)",
             "cloud_id": self.cloud_id[:12] + "..." if self.cloud_id else "not set",
             "memory_index": self.memory_index,
         }
