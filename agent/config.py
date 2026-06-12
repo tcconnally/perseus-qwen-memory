@@ -75,8 +75,17 @@ class AgentConfig:
     auto_reflect: bool = field(
         default_factory=lambda: os.getenv("AUTO_REFLECT", "true").lower() == "true"
     )
+    # Confidence lost per day of age at decay time: 0.05 ≈ 5%/day, so an
+    # unreinforced fact stored at 0.9 drops below the 0.3 recall floor
+    # after ~12 days. Applied by _decay_confidence at session end.
     confidence_decay_rate: float = field(
         default_factory=lambda: float(os.getenv("CONFIDENCE_DECAY_RATE", "0.05"))
+    )
+    # Character budget for recalled-memory context injected into the
+    # system prompt (~4 chars/token ≈ 2K tokens). Highest-confidence
+    # memories are kept; the rest are dropped with a truncation note.
+    max_context_chars: int = field(
+        default_factory=lambda: int(os.getenv("MAX_CONTEXT_CHARS", "8000"))
     )
 
     def validate(self) -> list[str]:

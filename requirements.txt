@@ -1,3 +1,7 @@
-openai>=1.0
-pydantic>=2.0
-python-dotenv>=1.0
+# Perseus Qwen Memory Agent — stdlib only, no runtime dependencies.
+# The Qwen Cloud client uses urllib from the standard library;
+# the Engram backend shells out to the engram binary.
+#
+# Dev/test:
+#   pip install pytest
+

@@ -76,21 +76,29 @@ class ProjectContextTool:
         }
 
     async def get_project_context(self, project: str) -> dict:
-        """Retrieve all remembered context for a project."""
-        stack_facts = await self.memory.recall(
-            query=f"tech stack", project=project, category="fact"
+        """Retrieve all remembered context for a project.
+
+        Uses wildcard recall scoped by category, then splits facts by
+        their stored tags — keyword queries like "conventions" only
+        matched memories that literally contained that word, so stored
+        conventions ("Use type hints everywhere") were never recalled.
+        """
+        facts = await self.memory.recall(
+            query="*", project=project, category="fact", limit=50
         )
         conventions = await self.memory.recall(
-            query=f"conventions", project=project, category="preference"
+            query="*", project=project, category="preference", limit=50
         )
-        architecture = await self.memory.recall(
-            query=f"architecture", project=project, category="fact"
-        )
+
+        stack = [r.entry.content for r in facts if "stack" in r.entry.tags]
+        architecture = [
+            r.entry.content for r in facts if "architecture" in r.entry.tags
+        ]
 
         return {
             "project": project,
-            "stack": [r.entry.content for r in stack_facts],
+            "stack": stack,
             "conventions": [r.entry.content for r in conventions],
-            "architecture": [r.entry.content for r in architecture],
-            "total_facts": len(stack_facts) + len(conventions) + len(architecture),
+            "architecture": architecture,
+            "total_facts": len(facts) + len(conventions),
         }
