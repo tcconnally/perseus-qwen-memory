@@ -15,7 +15,7 @@ from typing import Optional
 class MemoryEntry:
     """A single fact, decision, or piece of context stored in agent memory."""
 
-    id: str
+    id: str = ""
     content: str
     category: str  # "fact", "decision", "preference", "lesson", "context"
     project: str  # project namespace

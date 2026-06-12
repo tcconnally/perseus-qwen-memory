@@ -39,6 +39,16 @@ from agent.memory import (
 from agent.tools import DecisionLogTool, KnowledgeGraphTool, ProjectContextTool
 
 
+class LLMError(Exception):
+    """Raised when LLM API call fails after retries."""
+
+    def __init__(self, status_code: int, message: str, retryable: bool = False):
+        self.status_code = status_code
+        self.message = message
+        self.retryable = retryable
+        super().__init__(message)
+
+
 # ── LLM Client (OpenAI-compatible) ──────────────────────────────────────
 
 class QwenClient:
@@ -52,9 +62,14 @@ class QwenClient:
         self.api_key = config.llm_api_key
         self.base_url = config.llm_base_url.rstrip("/")
         self.model = config.llm_model
+        self.max_retries = 3
 
     async def chat(self, messages: list[dict], **kwargs) -> str:
-        """Send a chat completion request and return the response text."""
+        """Send a chat completion request and return the response text.
+
+        Retries on transient errors (429, 5xx) with exponential backoff.
+        Raises LLMError on non-retryable failures or exhaustion.
+        """
         import urllib.request
         import urllib.error
 
@@ -67,19 +82,39 @@ class QwenClient:
         }
 
         data = json.dumps(body).encode()
-        req = urllib.request.Request(url, data=data, method="POST")
-        req.add_header("Authorization", f"Bearer {self.api_key}")
-        req.add_header("Content-Type", "application/json")
+        last_error = None
 
-        try:
-            with urllib.request.urlopen(req, timeout=60) as r:
-                result = json.loads(r.read())
-                return result["choices"][0]["message"]["content"]
-        except urllib.error.HTTPError as e:
-            error_body = e.read().decode()[:500]
-            return f"[LLM Error {e.code}]: {error_body}"
-        except Exception as e:
-            return f"[LLM Error]: {e}"
+        for attempt in range(self.max_retries + 1):
+            req = urllib.request.Request(url, data=data, method="POST")
+            req.add_header("Authorization", f"Bearer {self.api_key}")
+            req.add_header("Content-Type", "application/json")
+
+            try:
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    result = json.loads(r.read())
+                    return result["choices"][0]["message"]["content"]
+            except urllib.error.HTTPError as e:
+                status = e.code
+                error_body = e.read().decode()[:500]
+                # Retry on rate limits and server errors
+                if status in (429, 500, 502, 503, 504) and attempt < self.max_retries:
+                    delay = 2 ** attempt
+                    await asyncio.sleep(delay)
+                    last_error = f"[LLM Error {status}]: {error_body}"
+                    continue
+                raise LLMError(
+                    status, error_body,
+                    retryable=status in (429, 500, 502, 503, 504)
+                )
+            except Exception as e:
+                if attempt < self.max_retries:
+                    delay = 2 ** attempt
+                    await asyncio.sleep(delay)
+                    last_error = str(e)
+                    continue
+                raise LLMError(0, str(e), retryable=True)
+
+        raise LLMError(0, last_error or "max retries exhausted", retryable=True)
 
 
 # ── Memory Manager ─────────────────────────────────────────────────────
@@ -98,33 +133,50 @@ class MemoryManager:
         self.config = config
         self.session_memories: list[str] = []  # IDs stored this session
 
-    async def recall_context(self, project: str, query: str = "") -> str:
-        """Recall relevant memories for the current conversation turn."""
+    async def recall_context(self, project: str, query: str = "",
+                             max_tokens: int = 2000) -> str:
+        """Recall relevant memories for the current conversation turn.
+
+        Args:
+            project: Project namespace to recall from.
+            query: Search query (defaults to project name).
+            max_tokens: Approximate token budget for recalled context.
+        """
         results = await self.memory.recall(
             query=query or project,
             project=project,
             limit=self.config.recall_count,
-            min_confidence=0.3,  # Skip very low-confidence memories
+            min_confidence=0.3,
         )
 
         if not results:
             return ""
 
         lines = ["[Recalled from memory:]"]
+        estimated_tokens = 0
         for r in results:
             age = ""
             if r.entry.created_at:
                 days = (datetime.now(timezone.utc) - r.entry.created_at).days
                 age = f" ({days}d ago)" if days > 0 else " (today)"
-            lines.append(
+            line = (
                 f"  [{r.entry.category}] {r.entry.content}"
                 f"{age} (confidence: {r.entry.confidence:.0%})"
             )
+            # Budget: ~4 chars per token is a safe over-estimate for English
+            estimated_tokens += len(line) // 4
+            if estimated_tokens > max_tokens:
+                break
+            lines.append(line)
         return "\n".join(lines)
 
     async def store(self, content: str, category: str, project: str,
-                    tags: list[str] = None, confidence: float = 1.0) -> str:
-        """Store a new memory and track it for this session."""
+                    tags: list[str] = None, confidence: float = 0.8) -> str:
+        """Store a new memory and track it for this session.
+
+        Default confidence is 0.8 so facts can decay over time.
+        Fully verified facts should be stored with confidence=1.0.
+        """
         entry = MemoryEntry(
             id=f"mem-{int(time.time() * 1000)}",
             content=content,
@@ -216,6 +268,9 @@ class PerseusQwenAgent:
         os.environ["SESSION_ID"] = self.session_id
         self.current_project = project
 
+        # Reset per-session counters (Q-5: was never reset, causing cumulative counts)
+        self.memory_mgr.session_memories = []
+
         # Health check
         health = await self.memory_backend.health_check()
 
@@ -240,7 +295,7 @@ class PerseusQwenAgent:
             self.current_project, user_message
         )
 
-        # 2. Build system prompt with memory
+        # 2. Build system prompt with memory (token-budgeted)
         system_prompt = self._build_system_prompt(recalled)
 
         # 3. Get LLM response
@@ -249,9 +304,15 @@ class PerseusQwenAgent:
             {"role": "user", "content": user_message},
         ]
 
-        response = await self.llm.chat(messages)
+        try:
+            response = await self.llm.chat(
+                messages,
+                max_tokens=self.config.llm_max_tokens,
+            )
+        except LLMError:
+            return "[Error: LLM request failed after retries. Check your DASHSCOPE_API_KEY and network.]"
 
-        # 4. Extract and store key facts from the conversation
+        # 4. Extract and store key facts (skip on LLM error)
         await self._auto_store(user_message, response)
 
         return response
@@ -281,7 +342,11 @@ class PerseusQwenAgent:
     # ── Helpers ────────────────────────────────────────────────────
 
     def _build_system_prompt(self, recalled_context: str = "") -> str:
-        """Build the system prompt with persistent memory context."""
+        """Build the system prompt with persistent memory context.
+
+        Token-budgeted: recalled context is limited to ~2000 chars of
+        memory content, keeping total prompt well within Qwen's context window.
+        """
         base = (
             "You are Perseus, a persistent memory agent powered by Qwen Cloud. "
             "You remember everything about the user's projects — their tech stack, "
@@ -291,6 +356,11 @@ class PerseusQwenAgent:
         ).format(project=self.current_project)
 
         if recalled_context:
+            # Token budget: cap recalled context to ~2000 estimated tokens
+            # (~4 chars per token for English text)
+            max_context_chars = 8000
+            if len(recalled_context) > max_context_chars:
+                recalled_context = recalled_context[:max_context_chars] + "\n[... older memories truncated ...]"
             base += f"\n{recalled_context}\n\n"
             base += (
                 "Use the recalled context above to give informed, "
@@ -301,7 +371,14 @@ class PerseusQwenAgent:
         return base
 
     async def _auto_store(self, user_msg: str, response: str):
-        """Automatically extract and store key facts from conversation."""
+        """Automatically extract and store key facts from conversation.
+
+        Skips extraction if the response is an error message.
+        """
+        # Skip if response is an error
+        if response.startswith("[Error:") or response.startswith("[LLM Error"):
+            return
+
         # Store the interaction itself as context
         await self.memory_mgr.store(
             content=f"User asked: {user_msg[:200]}",
@@ -328,7 +405,8 @@ class PerseusQwenAgent:
 
         try:
             result = await self.llm.chat(messages, temperature=0.3, max_tokens=500)
-            # Try to parse JSON from response
+            if result.startswith("[Error:") or result.startswith("[LLM Error"):
+                return
             result = result.strip()
             if result.startswith("```"):
                 result = result.split("```")[1]
@@ -352,6 +430,9 @@ class PerseusQwenAgent:
         Memories that haven't been accessed or reinforced in a while
         slowly lose confidence. If confidence drops below 0.3, they're
         effectively "forgotten" (excluded from recall).
+
+        Q-2 fix: Now actually writes back decayed confidence values
+        instead of computing them and hitting `pass`.
         """
         all_memories = await self.memory_backend.recall(
             query=self.current_project, limit=1000
@@ -359,21 +440,34 @@ class PerseusQwenAgent:
 
         now = datetime.now(timezone.utc)
         decay_rate = self.config.confidence_decay_rate
+        decayed_count = 0
 
         for result in all_memories:
             entry = result.entry
+
+            # Fully confident facts don't decay — they're verified
             if entry.confidence >= 1.0:
-                continue  # Fully confident facts don't decay
+                continue
 
             age_days = 0
             if entry.updated_at:
                 age_days = (now - entry.updated_at).days
 
-            if age_days > 1:  # Decay starts after 1 day
+            if age_days > 1:
                 new_confidence = max(0.0, entry.confidence - decay_rate * age_days)
                 if new_confidence < entry.confidence:
-                    # Update confidence (implementation depends on backend)
-                    pass  # Engram-rs backend stores confidence in metadata
+                    # Re-store the memory with reduced confidence
+                    entry.confidence = new_confidence
+                    entry.updated_at = now
+                    try:
+                        await self.memory_backend.remember(entry)
+                        decayed_count += 1
+                    except Exception:
+                        pass  # Best-effort decay; don't fail session end
+
+        if decayed_count:
+            print(f"  [decay] Reduced confidence on {decayed_count} memories",
+                  file=sys.stderr)
 
 
 # ── Demo Runner ─────────────────────────────────────────────────────────
