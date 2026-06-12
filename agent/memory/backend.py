@@ -15,10 +15,10 @@ from typing import Optional
 class MemoryEntry:
     """A single fact, decision, or piece of context stored in agent memory."""
 
-    id: str
     content: str
     category: str  # "fact", "decision", "preference", "lesson", "context"
     project: str  # project namespace
+    id: str = ""
     tags: list[str] = field(default_factory=list)
     source_session: Optional[str] = None
     confidence: float = 1.0  # 0.0-1.0, can decay or be reinforced
