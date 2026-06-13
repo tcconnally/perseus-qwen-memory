@@ -30,13 +30,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from agent.config import AgentConfig
-from agent.memory import (
+from perseus_agent_core.memory import (
     ElasticMemoryBackend,
     EngramMemoryBackend,
     MemoryEntry,
     MemorySearchResult,
 )
-from agent.tools import DecisionLogTool, KnowledgeGraphTool, ProjectContextTool
+from perseus_agent_core.tools import DecisionLogTool, KnowledgeGraphTool, ProjectContextTool
 
 
 class LLMError(Exception):
