@@ -3,4 +3,4 @@
 # For standalone Elasticsearch mode, install: pip install elasticsearch
 
 # Shared memory + tool layer (extracted from this repo and perseus-rapid-agent)
-perseus-agent-core @ git+https://github.com/tcconnally/perseus-agent-core.git
+perseus-agent-core>=0.2.0
