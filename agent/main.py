@@ -71,11 +71,43 @@ class QwenClient:
         self.base_url = config.llm_base_url.rstrip("/")
         self.model = config.llm_model
 
-    async def chat(self, messages: list[dict], **kwargs) -> str:
-        """Send a chat completion request and return the response text."""
+    def _request_sync(self, url: str, data: bytes) -> dict:
+        """Perform a single synchronous HTTP request (blocking I/O).
+
+        Extracted so chat() can wrap it in asyncio.to_thread() — keeps
+        the event loop free for concurrent work while this blocks.
+        """
         import urllib.error
         import urllib.request
 
+        req = urllib.request.Request(url, data=data, method="POST")
+        req.add_header("Authorization", f"Bearer {self.api_key}")
+        req.add_header("Content-Type", "application/json")
+
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            detail = ""
+            try:
+                detail = e.read().decode()[:300]
+            except Exception:
+                pass
+            raise LLMError(
+                f"LLM request failed with HTTP {e.code}: {detail}",
+                status=e.code,
+                retryable=(e.code == 429 or e.code >= 500),
+            ) from e
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            raise LLMError(f"LLM network error: {e}", retryable=True) from e
+
+    async def chat(self, messages: list[dict], **kwargs) -> str:
+        """Send a chat completion request and return the response text.
+
+        The blocking I/O (urllib) runs on a worker thread via
+        asyncio.to_thread() so the event loop stays responsive even
+        during the 60s timeout on the remote call.
+        """
         url = f"{self.base_url}/chat/completions"
         body = {
             "model": self.model,
@@ -90,35 +122,13 @@ class QwenClient:
             if attempt:
                 await asyncio.sleep(2 ** (attempt - 1))  # 1s, 2s, 4s
 
-            req = urllib.request.Request(url, data=data, method="POST")
-            req.add_header("Authorization", f"Bearer {self.api_key}")
-            req.add_header("Content-Type", "application/json")
-
             try:
-                with urllib.request.urlopen(req, timeout=60) as r:
-                    result = json.loads(r.read())
-                    return result["choices"][0]["message"]["content"]
-            except urllib.error.HTTPError as e:
-                detail = ""
-                try:
-                    detail = e.read().decode()[:300]
-                except Exception:
-                    pass
-                if e.code == 429 or e.code >= 500:
-                    last_error = LLMError(
-                        f"LLM request failed with HTTP {e.code}: {detail}",
-                        status=e.code,
-                        retryable=True,
-                    )
-                    continue
-                raise LLMError(
-                    f"LLM request failed with HTTP {e.code}: {detail}",
-                    status=e.code,
-                    retryable=False,
-                ) from e
-            except (urllib.error.URLError, TimeoutError, OSError) as e:
-                last_error = LLMError(f"LLM network error: {e}", retryable=True)
-                continue
+                result = await asyncio.to_thread(self._request_sync, url, data)
+                return result["choices"][0]["message"]["content"]
+            except LLMError as e:
+                if not e.retryable:
+                    raise
+                last_error = e
             except (json.JSONDecodeError, KeyError, IndexError) as e:
                 raise LLMError(f"LLM returned malformed response: {e}") from e
 
