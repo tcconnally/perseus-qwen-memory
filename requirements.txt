@@ -1,7 +1,6 @@
-# Perseus Qwen Memory Agent — stdlib only, no runtime dependencies.
-# The Qwen Cloud client uses urllib from the standard library;
-# the Engram backend shells out to the engram binary.
-#
-# Dev/test:
-#   pip install pytest
+# stdlib only — no dependencies
+# The agent uses Python standard library for HTTP and JSON.
+# For standalone Elasticsearch mode, install: pip install elasticsearch
 
+# Shared memory + tool layer (extracted from this repo and perseus-rapid-agent)
+perseus-agent-core @ git+https://github.com/tcconnally/perseus-agent-core.git
