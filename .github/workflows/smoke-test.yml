@@ -27,7 +27,7 @@ jobs:
           # to main when a merge reordered MemoryEntry's dataclass fields.
           import agent.main
           from agent.config import AgentConfig
-          from agent.memory.backend import MemoryEntry
+          from perseus_agent_core.memory import MemoryEntry
 
           issues = AgentConfig().validate()
           assert issues == [], f"config validation failed: {issues}"
